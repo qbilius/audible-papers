@@ -1,13 +1,13 @@
 fit:
   trainer:
     max_epochs: 20
-    max_steps: 1000
     logger:
       - class_path: 'lightning.pytorch.loggers.CSVLogger'
+      - class_path: 'loggers.MyLogger'
     callbacks:
-      - class_path: 'rich_progress.RichProgressBarWithPlot'
+      - class_path: 'dashboard.Dashboard'
         init_args:
-          window: 2000
+          plot_window: 2000
     log_every_n_steps: 15
     num_sanity_val_steps: 0
     gradient_clip_val: 1

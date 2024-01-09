@@ -20,7 +20,7 @@ class LayerNorm(nn.Module):
         return F.layer_norm(x, self.weight.shape, weight=self.weight, bias=self.bias, eps=1e-5)
 
 
-class CausalSelfAttention(nn.Module):
+class SelfAttention(nn.Module):
 
     def __init__(self,
                  n_head: int,
@@ -72,7 +72,7 @@ class Block(nn.Module):
                  ):
         super().__init__()
         self.ln_1 = LayerNorm(n_embed, bias)
-        self.attn = CausalSelfAttention(n_head, n_embed, dropout, bias)
+        self.attn = SelfAttention(n_head, n_embed, dropout, bias)
         self.ln_2 = LayerNorm(n_embed, bias)
         self.mlp = MLP(n_embed, dropout, bias)
 

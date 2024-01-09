@@ -75,7 +75,7 @@ class Model(pl.LightningModule):
 
         self.model = model.GPT(
             block_size=block_size,
-            vocab_size=65,  # 50304,
+            vocab_size=50304,
             n_layer=n_layer,
             n_head=n_head,
             n_embed=n_embed,
@@ -88,8 +88,9 @@ class Model(pl.LightningModule):
         self.train_acc = torchmetrics.Accuracy(task='binary')
         self.val_acc = torchmetrics.Accuracy(task='binary')
 
+        self.enc = tiktoken.get_encoding('gpt2')
+
     def forward(self, x):
-        x = torch.clamp_max(x, 64)
         out = self.model(x)
         return out
 

@@ -30,7 +30,7 @@ def trainval_split():
     split_dataset['val'] = split_dataset.pop('test')
 
     def process(example: dict) -> dict:
-        ids = enc.encode_ordinary(example['title'])
+        ids = enc.encode_ordinary(example['abstract'].replace('\n', ' '))
         lastname = None if example['submitter'] is None else example['submitter'].split()[-1]
         out = {
             'ids': ids,
@@ -78,13 +78,12 @@ def trainval_split():
 def citations():
     c = dataset.Citations(data_dir=data_dir)
     maxval = enc.max_token_value + 1
-    for stage in ['val']:
+    for stage in ['train', 'val']:
         data = np.memmap(data_dir / f'{stage}.bin', np.uint16, mode='r')
         cv = [enc.encode_ordinary(c()) for _ in tqdm.trange(len(data) // 64)]
         # pad each entry
         maxlen = len(max(cv, key=len))
         cv = [cit + [maxval] * (maxlen - len(cit)) for cit in cv]
-        breakpoint()
         np.save(data_dir / f'{stage}_citations.npy',
                 np.array(cv).astype(np.uint16))
 

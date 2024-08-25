@@ -36,6 +36,7 @@ class DataModule(pl.LightningDataModule):
             ),
             batch_size=self.hparams.batch_size,
             shuffle=stage == 'train',
+            persistent_workers=self.hparams.num_workers > 0,  # no need to read in data again
             num_workers=self.hparams.num_workers,
             pin_memory=False
         )
@@ -47,8 +48,9 @@ class DataModule(pl.LightningDataModule):
         return self._dataloader('val')
 
     def predict_dataloader(self):
-        samples = ...  # TODO
-        return self._dataloader(samples, 'predict')
+        return self._dataloader('val')
+        # samples = ...  # TODO
+        # return self._dataloader(samples, 'predict')
 
 
 class Model(pl.LightningModule):
@@ -60,15 +62,11 @@ class Model(pl.LightningModule):
                  n_embed: int,
                  dropout: float,
                  bias: bool,
+                 learning_rate: float,
                  beta1: float,
                  beta2: float,
-                 learning_rate=1e-3,
-                 fc_lr_ratio=10,
-                 use_adamw=True,
-                 momentum=.9,
-                 weight_decay=1e-4,
-                 use_scheduler=True,
-                 eta_min=1e-4,
+                 eta_min: float,
+                 weight_decay: float,
                  ):
         super().__init__()
         self.save_hyperparameters()
@@ -82,8 +80,7 @@ class Model(pl.LightningModule):
             dropout=dropout,
             bias=bias
         )
-
-        self.probs = nn.Softmax(dim=1)
+        # Can try adding pos_weight=torch.ones([1]) * 5 to increase bias for citation removal
         self.loss = nn.BCEWithLogitsLoss()
         self.train_acc = torchmetrics.Accuracy(task='binary')
         self.val_acc = torchmetrics.Accuracy(task='binary')
@@ -104,6 +101,15 @@ class Model(pl.LightningModule):
         acc(logits, y)
         self.log(f'{stage}_acc', acc, on_step=False, on_epoch=True)
 
+        if stage == 'val':
+            orig_tokens = x.detach().numpy()[0]
+            probs = torch.sigmoid(logits).detach().numpy()[0]
+            preds = [t for t, p in zip(orig_tokens, probs) if p < .5]
+            self.loggers[1].log_samples(
+                f'Input: {self.enc.decode(orig_tokens)}',
+                f'Output: {self.enc.decode(preds)}'
+            )
+
         return loss
 
     def training_step(self, batch, batch_idx):
@@ -115,9 +121,17 @@ class Model(pl.LightningModule):
 
     def predict_step(self, batch, batch_idx):
         x, y = batch
-        y_hat = self(x)
-        feats = self.features.features.view(self.features.features.shape[0], -1)
-        return feats, self.probs(y_hat)
+        logits = self(x)
+        for xi, yi in zip(x, y):
+            orig_tokens = xi.detach().numpy()
+            probs = self.probs(logits)[0].detach().numpy()
+            orig_text = self.enc.decode(orig_tokens)
+            exp_text = self.enc.decode([t for t, p in zip(orig_tokens, yi) if p < .5])
+            pred_text = self.enc.decode([t for t, p in zip(orig_tokens, probs) if p < .5])
+            print(f'> {orig_text}')
+            print(f'> {exp_text}')
+            print(f'> {pred_text}')
+            print()
 
     def configure_optimizers(self) -> ([torch.optim.AdamW], [torch.optim.lr_scheduler.CosineAnnealingLR]):
         # start with all of the candidate parameters

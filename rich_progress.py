@@ -1,5 +1,5 @@
 from threading import RLock
-from typing import Any, Callable, Dict, Generator, Optional, Union
+from typing import Any, Callable, Dict, Optional, Union
 
 from lightning_utilities.core.imports import RequirementCache
 
@@ -19,12 +19,16 @@ if _RICH_AVAILABLE:
     from rich.progress import ProgressColumn, Task, TaskID
 
     class ProgressWithLayout(CustomProgress):
-        """Overrides ``CustomProgress`` to support passing layout as a renderable."""
+        """
+        Overrides ``CustomProgress`` to support passing layout as a renderable.
+
+        Presumably `get_renderable` would provide the same functionality without having to copy-paste the entire `__init__` method, but I cannot get it to work.
+        """
 
         def __init__(
             self,
             *columns: Union[str, ProgressColumn],
-            renderable=None,
+            renderable=None,  # new parameter
             console: Optional[Console] = None,
             auto_refresh: bool = True,
             refresh_per_second: float = 10,
@@ -46,7 +50,7 @@ if _RICH_AVAILABLE:
             self._tasks: Dict[TaskID, Task] = {}
             self._task_index: TaskID = TaskID(0)
             self.live = Live(
-                renderable=renderable,
+                renderable=renderable,  # pass it here
                 console=console or get_console(),
                 auto_refresh=auto_refresh,
                 refresh_per_second=refresh_per_second,
@@ -62,20 +66,7 @@ if _RICH_AVAILABLE:
 
         """Create a dashboard with a progress bar with `rich text formatting <https://github.com/Textualize/rich>`_ and any other rich components.
 
-        This is a base class that should be inherited when composing your own dashboard. Your own subclass must define `layout` (`rich.layout.Layout`) and `components` (a dict of a string name of that component that is used in the `layout` and a `rich.jupyter.JupyterMixin` subclass defining the component).
-
-        Install it with pip:
-
-        .. code-block:: bash
-
-            pip install rich
-
-        .. code-block:: python
-
-            from lightning.pytorch import Trainer
-            from lightning.pytorch.callbacks import RichProgressBar
-
-            trainer = Trainer(callbacks=RichProgressBar())
+        This is a base class that should be inherited when composing your own dashboard. Your own subclass must define `layout` (`rich.layout.Layout`) that is split into subpanels (with unique names) and a `components` dictionary that for each of these names defines a subclass of `rich.jupyter.JupyterMixin` where the component's behavior is defined.
 
         Args:
             refresh_rate: Determines at which rate (in number of batches) the progress bars get updated.
@@ -116,7 +107,7 @@ if _RICH_AVAILABLE:
                 reconfigure(**self._console_kwargs)
                 self._console = get_console()
                 self._console.clear_live()
-                self._metric_component = MetricsTextColumnFix(
+                self._metric_component = MetricsTextColumn(
                     trainer,
                     self.theme.metrics,
                     self.theme.metrics_text_delimiter,
@@ -141,13 +132,3 @@ if _RICH_AVAILABLE:
 
             for component in self.components.values():
                 component.update(trainer)
-
-
-class MetricsTextColumnFix(MetricsTextColumn):
-    """A column containing text."""
-
-    def _generate_metrics_texts(self) -> Generator[str, None, None]:
-        for name, value in self._metrics.items():
-            if name != 'v_num' and not isinstance(value, str):
-                value = f"{value:{self._metrics_format}}"
-            yield f"{name}: {value}"

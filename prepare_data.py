@@ -16,7 +16,7 @@ enc = tiktoken.get_encoding('gpt2')
 n_workers = os.cpu_count() // 2
 
 
-def trainval_split():
+def trainval_split(max_size_mb: int = None):
     """
     Tokenizes the [gfissore
     /
@@ -47,11 +47,23 @@ def trainval_split():
     )
 
     # concatenate all the ids in each dataset into one large file we can use for training
+    if max_size_mb is not None:
+        n_tokens = max_size_mb * 1024**2 // 2  # convert to bytes and divide by 2, since uint16 is 2 bytes
+        suffix = f'_{max_size_mb}'
+    else:
+        n_tokens = None
+        suffix = ''
+
     lastnames = set()
     for split, dset in tokenized.items():
         arr_len = np.sum(dset['len'], dtype=np.uint64)
-        print(f'{split} has {arr_len} tokens')
-        filename = data_dir / f'{split}.bin'
+        msg = f'{split} has {arr_len} tokens'
+        if n_tokens is not None:
+            arr_len = min(n_tokens, arr_len)
+            msg += f'; {arr_len} will be saved'
+        print(msg)
+
+        filename = data_dir / f'{split}{suffix}.bin'
         arr = np.memmap(filename, dtype=np.uint16, mode='w+', shape=(arr_len,))
         total_batches = 1024
 
@@ -60,32 +72,49 @@ def trainval_split():
             # Batch together samples for faster write
             batch = dset.shard(num_shards=total_batches, index=batch_idx, contiguous=True).with_format('numpy')
             arr_batch = np.concatenate(batch['ids'])
-            # Write into mmap if there is anything left
-            if len(arr[idx: idx + len(arr_batch)]) == 0:
-                break
-            arr[idx: idx + len(arr_batch)] = arr_batch
 
+            # Write into mmap if there is anything left
+            end = min(idx + len(arr_batch), n_tokens)
+            if len(arr[idx: end]) == 0:
+                break
+            arr[idx: end] = arr_batch[:end - idx]
+            idx += len(arr_batch)
+            if idx >= n_tokens:
+                break
+
+        arr.flush()
+
+        # accumulate unique last names
+        for batch_idx in tqdm.tqdm(range(total_batches), desc=f'writing lastnames.npy'):
+            batch = dset.shard(num_shards=total_batches, index=batch_idx, contiguous=True).with_format('numpy')
             names = [n for n in batch['lastname'] if n is not None]
             lastnames.update(set(names))
-
-            idx += len(arr_batch)
-        arr.flush()
 
     np.save(filename.with_name('lastnames.npy'), list(lastnames))
     print(f'There are {len(lastnames)} unique last names')
 
 
-def citations():
+def citations(block_size=16, max_samples=None, suffix=''):
     c = dataset.Citations(data_dir=data_dir)
     maxval = enc.max_token_value + 1
     for stage in ['train', 'val']:
-        data = np.memmap(data_dir / f'{stage}.bin', np.uint16, mode='r')
-        cv = [enc.encode_ordinary(c()) for _ in tqdm.trange(len(data) // 64)]
+        data = np.memmap(data_dir / f'{stage}{suffix}.bin', np.uint16, mode='r')
+
+        # generate random citations
+        cv = []
+        cv_isnum = []
+        for _ in tqdm.trange(len(data) // block_size, desc=stage):
+            cit, is_number = c()
+            cv.append(enc.encode_ordinary(cit))
+            cv_isnum.append(is_number)
+
         # pad each entry
         maxlen = len(max(cv, key=len))
         cv = [cit + [maxval] * (maxlen - len(cit)) for cit in cv]
-        np.save(data_dir / f'{stage}_citations.npy',
+        np.save(data_dir / f'{stage}_citations{suffix}.npy',
                 np.array(cv).astype(np.uint16))
+        np.save(data_dir / f'{stage}_citations_isnum{suffix}.npy',
+                np.array(cv_isnum).astype(np.bool_))
 
 
 if __name__ == '__main__':

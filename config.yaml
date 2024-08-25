@@ -2,30 +2,28 @@ fit:
   trainer:
     max_epochs: 20
     logger:
-      - class_path: 'lightning.pytorch.loggers.CSVLogger'
-      - class_path: 'loggers.MyLogger'
+      - class_path: "lightning.pytorch.loggers.CSVLogger"
+      - class_path: "loggers.TextLogger"
+    val_check_interval: .1
     callbacks:
-      - class_path: 'dashboard.Dashboard'
+      - class_path: "dashboard.Dashboard"
         init_args:
           plot_window: 2000
-    log_every_n_steps: 15
     num_sanity_val_steps: 0
     gradient_clip_val: 1
-    gradient_clip_algorithm: 'value'
+    gradient_clip_algorithm: "value"
   model:
     block_size: 64
     n_layer: 1
     n_head: 1
     n_embed: 128
+    dropout: 0
+    bias: false
     learning_rate: 1.e-4
     beta1: .9
     beta2: .99
-    weight_decay: 1.e-5
-    momentum: .9
-    use_scheduler: false
     eta_min: 1.e-5
-    dropout: 0
-    bias: false
+    weight_decay: 1.e-5
   data:
     batch_size: 12
     num_workers: 0
@@ -33,8 +31,20 @@ fit:
 predict:
   trainer:
     logger: false
-    callbacks:
-      - class_path: 'PredictionWriter'
+    # callbacks:
+    #   - class_path: 'PredictionWriter'
+  model:
+    block_size: 16
+    n_layer: 1
+    n_head: 1
+    n_embed: 128
+    dropout: 0
+    bias: false
+    learning_rate: 1.e-4
+    beta1: .9
+    beta2: .99
+    eta_min: 1.e-5
+    weight_decay: 1.e-5
   data:
     batch_size: 12
     num_workers: 0

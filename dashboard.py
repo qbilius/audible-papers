@@ -15,7 +15,7 @@ import plotext as plt
 import rich_progress
 
 
-class Dashboard(rich_progress.Dashboard):
+class Dashboard(rich_progress.BaseDashboard):
 
     def __init__(self,
                  plot_window: Optional[int] = None,
@@ -30,16 +30,16 @@ class Dashboard(rich_progress.Dashboard):
                          console_kwargs=console_kwargs
                          )
 
-        self.layout: Layout = Layout(name='root')
-        self.layout.split(
-            Layout(name='plot', ratio=1),
-            Layout(name='progress_bar', size=1),
-            Layout(name='samples', size=2),
-        )
         self.components = {
             'plot': Plot(window=plot_window),
             'samples': TextSamples()
         }
+        self.layout: Layout = Layout(name='root')
+        self.layout.split(
+            Layout(name='plot', ratio=1),
+            Layout(name='progress_bar', size=1),
+            Layout(name='samples', size=6),
+        )
 
     def _update(self,
                 progress_bar_id: Optional['TaskID'],
@@ -103,8 +103,6 @@ class Plot(JupyterMixin):
         if self.window is not None:
             start = max(0, max(xs, default=0) - self.window)
             plt.xlim(start, start + self.window)
-
-        plt.title(f'{len(ys)}')
 
         return plt.build()
 

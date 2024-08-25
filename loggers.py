@@ -1,10 +1,5 @@
-from typing import Optional, Union, Any, Dict
-from argparse import Namespace
-import tempfile
-
 from typing_extensions import override
-from lightning.pytorch.loggers.logger import Logger, DummyLogger
-from lightning.pytorch.utilities import rank_zero_only
+from lightning.pytorch.loggers.logger import DummyLogger
 from lightning.fabric.loggers.csv_logs import CSVLogger as FabricCSVLogger
 
 from lightning.fabric.utilities.types import _PATH
